@@ -134,9 +134,10 @@ async def test_describe_table(mock_client: AsyncMock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_table_freshness_defaults(mock_client: AsyncMock) -> None:
+async def test_check_table_freshness_auto_detect(mock_client: AsyncMock) -> None:
     from mcp_clickhouse.tools.monitoring import check_table_freshness
 
+    # First candidate (_timestamp) succeeds
     await check_table_freshness("events")
     mock_client.query.assert_called_once_with(
         "SELECT max(_timestamp) AS latest FROM default.events"
@@ -154,6 +155,50 @@ async def test_check_table_freshness_custom_col(mock_client: AsyncMock) -> None:
 
 
 @pytest.mark.asyncio
+async def test_check_table_freshness_qualified_name(mock_client: AsyncMock) -> None:
+    """Qualified table name should NOT get double-prefixed."""
+    from mcp_clickhouse.tools.monitoring import check_table_freshness
+
+    await check_table_freshness("bronze.src_marketplace_vendas_mysql")
+    sql = mock_client.query.call_args[0][0]
+    assert "bronze.src_marketplace_vendas_mysql" in sql
+    assert "default.bronze" not in sql
+
+
+@pytest.mark.asyncio
+async def test_check_table_freshness_auto_detect_fallback(mock_client: AsyncMock) -> None:
+    """When first candidates fail, try the next ones."""
+    from mcp_clickhouse.tools.monitoring import check_table_freshness
+
+    call_count = 0
+
+    async def fail_then_succeed(sql: str) -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 2:
+            raise Exception("column not found")
+        return MOCK_JSON_RESPONSE
+
+    mock_client.query = AsyncMock(side_effect=fail_then_succeed)
+
+    result = await check_table_freshness("events")
+    assert result == MOCK_JSON_RESPONSE
+    assert call_count == 3  # _timestamp failed, timestamp failed, created_at worked
+
+
+@pytest.mark.asyncio
+async def test_check_table_freshness_no_timestamp_col(mock_client: AsyncMock) -> None:
+    """When all candidates fail, return error message."""
+    from mcp_clickhouse.tools.monitoring import check_table_freshness
+
+    mock_client.query = AsyncMock(side_effect=Exception("column not found"))
+
+    result = await check_table_freshness("events")
+    assert "error" in result
+    assert "No timestamp column found" in result
+
+
+@pytest.mark.asyncio
 async def test_get_row_counts(mock_client: AsyncMock) -> None:
     from mcp_clickhouse.tools.monitoring import get_row_counts
 
@@ -162,3 +207,15 @@ async def test_get_row_counts(mock_client: AsyncMock) -> None:
     assert "events" in call_sql
     assert "users" in call_sql
     assert "UNION ALL" in call_sql
+
+
+@pytest.mark.asyncio
+async def test_get_row_counts_qualified_names(mock_client: AsyncMock) -> None:
+    """Qualified table names should NOT get double-prefixed."""
+    from mcp_clickhouse.tools.monitoring import get_row_counts
+
+    await get_row_counts(["bronze.events", "silver.users"])
+    call_sql = mock_client.query.call_args[0][0]
+    assert "bronze.events" in call_sql
+    assert "silver.users" in call_sql
+    assert "default.bronze" not in call_sql
