@@ -48,7 +48,10 @@ class ClickHouseClient:
             },
             headers={"Content-Type": "text/plain"},
         )
-        response.raise_for_status()
+        # ClickHouse returns non-200 for query errors (e.g., 404 for unknown table)
+        # but includes the error message in the body — return it for the LLM
+        if response.status_code >= 400:
+            return f"[ClickHouse Error {response.status_code}] {response.text[:500]}"
         return response.text
 
     async def close(self) -> None:
