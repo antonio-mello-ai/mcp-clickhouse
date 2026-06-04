@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mcp_clickhouse.identifiers import quote_identifier, quote_qualified_name
 from mcp_clickhouse.server import get_client, mcp
 
 # Common timestamp column names, checked in order.
@@ -16,14 +17,18 @@ _TIMESTAMP_CANDIDATES = (
 
 
 def _resolve_qualified_name(table: str, default_db: str) -> str:
-    """Return a fully-qualified ``database.table`` name.
+    """Return a validated, backtick-quoted ``database.table`` name.
 
     If *table* already contains a dot (e.g. ``bronze.my_table``), use it
-    as-is.  Otherwise prepend *default_db*.
+    as-is.  Otherwise prepend *default_db*. Each identifier part is validated
+    and quoted to prevent SQL injection.
+
+    Raises:
+        ValueError: If any identifier part is unsafe.
     """
     if "." in table:
-        return table
-    return f"{default_db}.{table}"
+        return quote_qualified_name(table)
+    return quote_qualified_name(f"{default_db}.{table}")
 
 
 @mcp.tool()
@@ -50,13 +55,14 @@ async def check_table_freshness(
     fqn = _resolve_qualified_name(table, db)
 
     if timestamp_col:
-        sql = f"SELECT max({timestamp_col}) AS latest FROM {fqn}"
+        col_sql = quote_identifier(timestamp_col)
+        sql = f"SELECT max({col_sql}) AS latest FROM {fqn}"
         return await client.query(sql)
 
     # Auto-detect: try each candidate column.
     for col in _TIMESTAMP_CANDIDATES:
         try:
-            sql = f"SELECT max({col}) AS latest FROM {fqn}"
+            sql = f"SELECT max({quote_identifier(col)}) AS latest FROM {fqn}"
             return await client.query(sql)
         except Exception:
             continue
@@ -84,8 +90,11 @@ async def get_row_counts(tables: list[str], database: str | None = None) -> str:
     db = database or client._config.database
 
     unions = " UNION ALL ".join(
-        f"SELECT '{t}' AS table_name, count(*) AS row_count "
-        f"FROM {_resolve_qualified_name(t, db)}"
+        # _resolve_qualified_name validates+quotes the identifier first, so a
+        # hostile name raises before reaching the string literal below. The
+        # literal is single-quote-escaped as defence in depth.
+        f"SELECT '{t.replace(chr(39), chr(39) * 2)}' AS table_name, "
+        f"count(*) AS row_count FROM {_resolve_qualified_name(t, db)}"
         for t in tables
     )
     return await client.query(unions)

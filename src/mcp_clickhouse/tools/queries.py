@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from mcp_clickhouse.identifiers import quote_identifier, quote_qualified_name
 from mcp_clickhouse.server import get_client, mcp
 
 # Allowed first-token prefixes (upper-cased).
@@ -63,7 +64,7 @@ async def list_tables(database: str | None = None) -> str:
     """
     client = get_client()
     db = database or client._config.database
-    return await client.query(f"SHOW TABLES FROM {db}")
+    return await client.query(f"SHOW TABLES FROM {quote_identifier(db)}")
 
 
 @mcp.tool()
@@ -80,4 +81,5 @@ async def describe_table(table: str, database: str | None = None) -> str:
     """
     client = get_client()
     db = database or client._config.database
-    return await client.query(f"DESCRIBE TABLE {db}.{table}")
+    qualified = quote_qualified_name(f"{db}.{table}")
+    return await client.query(f"DESCRIBE TABLE {qualified}")
