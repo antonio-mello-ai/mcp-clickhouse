@@ -41,3 +41,7 @@ mcp-clickhouse
 ```bash
 pytest
 ```
+
+## License
+
+MIT
