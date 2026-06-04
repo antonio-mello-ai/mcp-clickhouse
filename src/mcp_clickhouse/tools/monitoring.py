@@ -15,9 +15,7 @@ _TIMESTAMP_CANDIDATES = (
 )
 
 
-def _resolve_qualified_name(
-    table: str, default_db: str
-) -> str:
+def _resolve_qualified_name(table: str, default_db: str) -> str:
     """Return a fully-qualified ``database.table`` name.
 
     If *table* already contains a dot (e.g. ``bronze.my_table``), use it
@@ -65,7 +63,7 @@ async def check_table_freshness(
 
     return (
         f'{{"error": "No timestamp column found in {fqn}. '
-        f'Tried: {", ".join(_TIMESTAMP_CANDIDATES)}. '
+        f"Tried: {', '.join(_TIMESTAMP_CANDIDATES)}. "
         f'Pass timestamp_col explicitly."}}'
     )
 

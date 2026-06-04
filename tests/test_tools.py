@@ -166,7 +166,9 @@ async def test_check_table_freshness_qualified_name(mock_client: AsyncMock) -> N
 
 
 @pytest.mark.asyncio
-async def test_check_table_freshness_auto_detect_fallback(mock_client: AsyncMock) -> None:
+async def test_check_table_freshness_auto_detect_fallback(
+    mock_client: AsyncMock,
+) -> None:
     """When first candidates fail, try the next ones."""
     from mcp_clickhouse.tools.monitoring import check_table_freshness
 
