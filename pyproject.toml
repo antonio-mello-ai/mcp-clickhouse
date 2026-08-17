@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-clickhouse"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCP server for interacting with ClickHouse via FastMCP"
 requires-python = ">=3.12"
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.2.0,<2",
     "httpx>=0.28.0",
 ]
 
